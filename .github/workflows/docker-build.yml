@@ -78,14 +78,14 @@ jobs:
       - name: Update Container App with new image
         run: |
           az containerapp update \
-            --name teamA2-iris-api \
-            --resource-group model-deploy-course-rg \
+            --name team-a2-iris-api \
+            --resource-group A21 \
             --image ${{ secrets.ACR_LOGIN_SERVER }}/iris-classifier:latest
 
       - name: Print live URL
         run: |
           URL=$(az containerapp show \
-            --name teamA2-iris-api \
-            --resource-group model-deploy-course-rg \
+            --name team-a2-iris-api \
+            --resource-group A21 \
             --query "properties.configuration.ingress.fqdn" -o tsv)
           echo "✅ Deployed to: https://$URL"
