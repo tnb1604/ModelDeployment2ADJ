@@ -6,6 +6,7 @@ Endpoints:
     GET  /health    - Health check
     GET  /metadata  - Model metadata
     POST /predict   - Make a prediction
+    GET  /metrics   - Prometheus metrics (operational + functional)
 """
 
 import logging
@@ -13,6 +14,9 @@ import pickle
 import os
 import time
 from flask import Flask, jsonify, request, g
+from flask_cors import CORS
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter, Histogram
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -23,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+CORS(app)  # Allow cross-origin requests from any frontend
 
 MODEL_PATH = os.getenv("MODEL_PATH", "model/iris_model.pkl")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "1.0.0")
@@ -37,7 +42,30 @@ FEATURE_RANGES = {
     "petal_width":  (0.1, 3.0),
 }
 
-# Load model at startup so we fail fast if it's missing
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+# Operational metrics (request count, latency, status codes) are tracked
+# automatically by PrometheusMetrics on the /metrics endpoint.
+metrics = PrometheusMetrics(app)
+metrics.info("iris_api_info", "Iris classifier API", version=MODEL_VERSION)
+
+# Functional metrics — track model behaviour, not just HTTP traffic
+prediction_counter = Counter(
+    "iris_predictions_total",
+    "Total number of predictions made, labelled by predicted class",
+    ["predicted_class"],
+)
+confidence_histogram = Histogram(
+    "iris_prediction_confidence",
+    "Confidence (probability) of the predicted class",
+    buckets=[0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0],
+)
+invalid_input_counter = Counter(
+    "iris_invalid_inputs_total",
+    "Total number of requests rejected due to invalid or out-of-range input",
+    ["reason"],
+)
+
+# ── Model loading ─────────────────────────────────────────────────────────────
 try:
     with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
@@ -74,7 +102,7 @@ def log_request(response):
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Endpoint not found", "available_endpoints": [
-        "GET /health", "GET /metadata", "POST /predict"
+        "GET /health", "GET /metadata", "POST /predict", "GET /metrics"
     ]}), 404
 
 
@@ -125,11 +153,13 @@ def predict():
 
     data = request.get_json(silent=True)
     if not data:
+        invalid_input_counter.labels(reason="invalid_json").inc()
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
     # Validate all required features are present
     missing = [f for f in FEATURE_NAMES if f not in data]
     if missing:
+        invalid_input_counter.labels(reason="missing_fields").inc()
         return jsonify({
             "error": f"Missing required fields: {missing}",
             "required_fields": FEATURE_NAMES,
@@ -139,6 +169,7 @@ def predict():
     try:
         features = [[float(data[f]) for f in FEATURE_NAMES]]
     except (TypeError, ValueError):
+        invalid_input_counter.labels(reason="non_numeric").inc()
         return jsonify({"error": "All feature values must be numbers"}), 400
 
     # Validate values are within realistic Iris measurement ranges
@@ -151,6 +182,7 @@ def predict():
                 f"{feature}={val} (expected {low}–{high} cm)"
             )
     if out_of_range:
+        invalid_input_counter.labels(reason="out_of_range").inc()
         logger.warning("Out-of-range input values: %s", out_of_range)
         return jsonify({
             "error": "One or more feature values are outside the expected range",
@@ -163,11 +195,16 @@ def predict():
         prediction_index = int(model.predict(features)[0])
         probabilities = model.predict_proba(features)[0].tolist()
         predicted_class = CLASS_NAMES[prediction_index]
+        confidence = probabilities[prediction_index]
+
+        # Track functional metrics
+        prediction_counter.labels(predicted_class=predicted_class).inc()
+        confidence_histogram.observe(confidence)
 
         logger.info(
-            "Prediction: %s (index %d) | input: %s",
+            "Prediction: %s (confidence %.2f) | input: %s",
             predicted_class,
-            prediction_index,
+            confidence,
             {f: data[f] for f in FEATURE_NAMES},
         )
 
@@ -189,4 +226,5 @@ def predict():
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug, host="0.0.0.0", port=5000)
