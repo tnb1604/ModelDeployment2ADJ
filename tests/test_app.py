@@ -1,23 +1,15 @@
-"""
-tests/test_app.py
------------------
-Pytest tests for the Iris classifier Flask API.
-Covers all three endpoints and key error cases.
-"""
-
 import pytest
 from app import app
 
 
 @pytest.fixture
 def client():
-    """Create a Flask test client for each test."""
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
 
 
-# ── /health ───────────────────────────────────────────────────────────────────
+# /health
 
 def test_health_returns_200(client):
     response = client.get("/health")
@@ -25,11 +17,11 @@ def test_health_returns_200(client):
 
 
 def test_health_returns_healthy_status(client):
-    data = response = client.get("/health").get_json()
+    data = client.get("/health").get_json()
     assert data["status"] == "healthy"
 
 
-# ── /metadata ─────────────────────────────────────────────────────────────────
+# /metadata
 
 def test_metadata_returns_200(client):
     response = client.get("/metadata")
@@ -57,7 +49,7 @@ def test_metadata_features_are_correct(client):
     ]
 
 
-# ── /predict — valid inputs ───────────────────────────────────────────────────
+# /predict - valid inputs
 
 VALID_SETOSA = {
     "sepal_length": 5.1,
@@ -90,7 +82,7 @@ def test_predict_returns_probabilities(client):
     assert "probabilities" in data
     probs = data["probabilities"]
     assert set(probs.keys()) == {"setosa", "versicolor", "virginica"}
-    assert abs(sum(probs.values()) - 1.0) < 0.001  # probabilities must sum to ~1
+    assert abs(sum(probs.values()) - 1.0) < 0.001
 
 
 def test_predict_returns_model_version(client):
@@ -108,7 +100,7 @@ def test_predict_virginica_correctly_classified(client):
     assert data["prediction"] == "virginica"
 
 
-# ── /predict — error cases ────────────────────────────────────────────────────
+# /predict - error cases
 
 def test_predict_returns_400_for_empty_body(client):
     response = client.post("/predict", data="", content_type="application/json")
@@ -134,7 +126,7 @@ def test_predict_returns_400_for_non_numeric_values(client):
 
 def test_predict_returns_422_for_out_of_range_values(client):
     response = client.post("/predict", json={
-        "sepal_length": 99.0,  # way outside valid range
+        "sepal_length": 99.0,
         "sepal_width": 3.5,
         "petal_length": 1.4,
         "petal_width": 0.2,
@@ -152,7 +144,7 @@ def test_predict_422_response_includes_out_of_range_details(client):
     assert "out_of_range" in data
 
 
-# ── 404 / 405 ─────────────────────────────────────────────────────────────────
+# 404 / 405
 
 def test_unknown_endpoint_returns_404(client):
     response = client.get("/nonexistent")
