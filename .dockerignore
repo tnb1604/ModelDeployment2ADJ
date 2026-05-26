@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# Development & course files
+_course_docs/
+train_model.py
+
+# Tests (not needed in the production image)
+tests/
+
+# IDE
+.vscode/
+.idea/

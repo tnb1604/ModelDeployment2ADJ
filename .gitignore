@@ -29,5 +29,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Pytest
+.pytest_cache/
+pytest-cache-files-*/
+
 # context
 _course_docs/
