@@ -1,4 +1,5 @@
 import pytest
+import app as app_module
 from app import app
 
 
@@ -154,3 +155,29 @@ def test_unknown_endpoint_returns_404(client):
 def test_get_on_predict_returns_405(client):
     response = client.get("/predict")
     assert response.status_code == 405
+
+
+# API key authentication
+
+def test_predict_returns_401_when_api_key_set_and_missing(client, monkeypatch):
+    monkeypatch.setattr(app_module, "API_KEY", "secret123")
+    response = client.post("/predict", json=VALID_SETOSA)
+    assert response.status_code == 401
+
+
+def test_predict_returns_401_when_api_key_wrong(client, monkeypatch):
+    monkeypatch.setattr(app_module, "API_KEY", "secret123")
+    response = client.post("/predict", json=VALID_SETOSA, headers={"X-API-Key": "wrong"})
+    assert response.status_code == 401
+
+
+def test_predict_succeeds_with_correct_api_key(client, monkeypatch):
+    monkeypatch.setattr(app_module, "API_KEY", "secret123")
+    response = client.post("/predict", json=VALID_SETOSA, headers={"X-API-Key": "secret123"})
+    assert response.status_code == 200
+
+
+def test_health_is_public_even_when_api_key_set(client, monkeypatch):
+    monkeypatch.setattr(app_module, "API_KEY", "secret123")
+    response = client.get("/health")
+    assert response.status_code == 200

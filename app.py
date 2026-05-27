@@ -19,6 +19,7 @@ CORS(app)
 
 MODEL_PATH = os.getenv("MODEL_PATH", "model/iris_model_v1.0.0.pkl")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "1.0.0")
+API_KEY = os.getenv("API_KEY", "")
 CLASS_NAMES = ["setosa", "versicolor", "virginica"]
 FEATURE_NAMES = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 
@@ -61,13 +62,21 @@ except FileNotFoundError:
 
 
 @app.before_request
+def check_api_key():
+    if request.path in ("/health", "/metrics"):
+        return
+    if API_KEY and request.headers.get("X-API-Key") != API_KEY:
+        return jsonify({"error": "Unauthorized — provide a valid X-API-Key header"}), 401
+
+
+@app.before_request
 def start_timer():
     g.start_time = time.time()
 
 
 @app.after_request
 def log_request(response):
-    duration_ms = round((time.time() - g.start_time) * 1000, 2)
+    duration_ms = round((time.time() - g.get("start_time", time.time())) * 1000, 2)
     logger.info(
         "%s %s -> %d (%.2f ms)",
         request.method,

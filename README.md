@@ -60,6 +60,7 @@ docker run -p 5000:5000 iris-api
 |----------|---------|-------------|
 | MODEL_PATH | model/iris_model_v1.0.0.pkl | Path to the model file |
 | MODEL_VERSION | 1.0.0 | Version string returned in API responses |
+| API_KEY | _(empty)_ | If set, all endpoints except `/health` and `/metrics` require `X-API-Key: <value>` |
 | FLASK_DEBUG | false | Enable Flask debug mode |
 
 ## Running tests
